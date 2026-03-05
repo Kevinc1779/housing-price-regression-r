@@ -1,0 +1,285 @@
+---
+title: "Housing Price Prediction"
+author: "Kevin Chen"
+date: "2025-10-30"
+output: word_document
+---
+
+Abstract
+This study examines the factors influencing housing prices using a dataset from Kaggle that includes attributes such as property size, number of bedrooms, bathrooms, year built, and neighborhood. A multiple linear regression model is built in R to identify which features are statistically significant predictors of sale price. Preliminary findings suggest that larger properties and newer homes tend to sell for higher prices. This analysis highlights how regression modeling can be applied to estimate real estate values and interpret market behavior.
+
+Objectives
+The objective of this study is to analyze the key determinants of housing prices using statistical modeling techniques. Specifically, this project aims to identify how structural features (such as square footage, number of bedrooms and bathrooms, and year built) and location-based characteristics influence property values. By developing a multiple linear regression model, the study seeks to quantify the effect of each factor and evaluate how well these variables explain variations in housing prices.
+
+Source
+https://www.kaggle.com/datasets/muhammadbinimran/housing-price-prediction-data
+Contains approximately 50,000 oberservations and 6 variables
+
+Environment
+R on RStudio
+
+Data Exploration
+
+```{r}
+housing <- read.csv("housing_price_dataset.csv")
+str(housing)
+head(housing)
+```
+
+
+
+
+```{r}
+summary(housing)
+
+```
+
+```{r}
+# Histograms
+hist(housing$Price)
+hist(housing$SquareFeet)
+hist(housing$YearBuilt)
+
+# Bar plot for neighborhood
+barplot(table(housing$Neighborhood))
+
+# Scatter plots
+plot(housing$SquareFeet, housing$Price,
+     main="Price vs Square Feet", xlab="Square Feet", ylab="Price", pch=19)
+plot(housing$Bedrooms, housing$Price,
+     main="Price vs Bedrooms", xlab="Bedrooms", ylab="Price", pch=19)
+
+```
+General Assumptions
+Linearity
+From the Price vs Square Feet scatterplot, the relationships between these 2 variables appear approximately linear, so assuming linear regression is appropriate.
+
+Independence of Observations
+The dataset consists of independent housing samples, so the independence assumption is likely valid.
+
+Homoscedasticity and normality of residuals will be confirmed later after fitting the model
+
+
+Collinearity evaluations
+```{r}
+
+cor(housing[, c("SquareFeet", "Bedrooms", "Bathrooms", "YearBuilt")])
+library(corrplot)
+corrplot(cor(housing[, sapply(housing, is.numeric)]), method = "color")
+
+```
+```{r}
+model <- lm(Price ~ SquareFeet + Bedrooms + Bathrooms + YearBuilt, data = housing)
+library(car)
+vif(model)
+
+```
+
+All results were approximately 0 from the correlation matrix and all of the VIF values are approximately 1, signaling no multicollinearity at all.
+
+
+Check for any missing values
+```{r}
+colSums(is.na(housing))
+
+```
+Since there is none, there is no need to change anything.
+
+
+```{r}
+boxplot(housing$Price, main="Boxplot of House Prices", col="lightblue")
+boxplot(housing$SquareFeet, main="Boxplot of Square Feet", col="lightgreen")
+par(mfrow = c(2, 3))   # 2 rows, 3 columns layout
+
+# 1. Price histogram
+hist(housing$Price,
+     breaks = 30,
+       main = "Price",
+     xlab = "")
+
+# 2. SquareFeet histogram
+hist(housing$SquareFeet,
+     breaks = 30,
+     main = "Square Feet",
+     xlab = "")
+
+# 3. Bedrooms bar chart
+barplot(table(housing$Bedrooms),
+        main = "Bedrooms",
+        xlab = "")
+
+# 4. Bathrooms bar chart
+barplot(table(housing$Bathrooms),
+        main = "Bathrooms",
+        xlab = "")
+
+# 5. YearBuilt histogram
+hist(housing$YearBuilt,
+     breaks = 30,
+     main = "Year Built",
+     xlab = "")
+
+# 6. Neighborhood bar chart
+barplot(table(housing$Neighborhood),
+        main = "Neighborhood",
+        xlab = "")
+
+par(mfrow = c(1, 1))   # reset layout
+
+```
+
+looks like theres outliers in house prices
+
+
+```{r}
+boxplot.stats(housing$Price)$out
+
+```
+There seems to be negative numbers in the dataset so I replaced all negative values with 0
+```{r}
+housing <- subset(housing, Price > 0)
+boxplot(housing$Price, main="Boxplot of House Prices")
+corrplot(cor(housing[, sapply(housing, is.numeric)]), method = "color")
+
+
+```
+
+I removed the negative values and replaced them with 0s since house prices cannot be negative. High-end positive outliers were retained since they can represent valid properties.
+
+
+```{r}
+par(mfrow = c(1, 1))
+hist(housing$Price, main="Distribution of Price", col="lightblue")
+hist(housing$SquareFeet, main="Distribution of Square Feet", col="lightgreen")
+hist(housing$Bedrooms, main="Distribution of Bedrooms", col="lightcoral")
+hist(housing$YearBuilt, main="Distribution of Year Built", col="lightgoldenrod")
+par(mfrow = c(1, 1))
+
+```
+
+I used histograms to see if any transformations were required for each predictor. Everything appeared normally distributed so no transformations were done. 
+
+
+This turns categorical values into dummy variables
+```{r}
+housing$Neighborhood <- as.factor(housing$Neighborhood)
+levels(housing$Neighborhood)
+```
+
+Fitting the model
+
+```{r}
+# Univariate regressions
+model_sqft <- lm(Price ~ SquareFeet, data = housing)
+model_bed  <- lm(Price ~ Bedrooms, data = housing)
+model_bath <- lm(Price ~ Bathrooms, data = housing)
+model_year <- lm(Price ~ YearBuilt, data = housing)
+model_neigh <- lm(Price ~ Neighborhood, data = housing)
+
+# Summaries
+summary(model_sqft)
+summary(model_bed)
+summary(model_bath)
+summary(model_year)
+summary(model_neigh)
+
+```
+
+These results showed that square footage was the single most important predictor of price, explaining the largest proportion of variance. Bedroom, bathrooms, and neighborhood also displayed positive and statistically significant effects on price, while year built was not significant in predicting price on its own.
+
+```{r}
+# Example: does SquareFeet's effect depend on Neighborhood?
+model_interaction <- lm(Price ~ SquareFeet * Neighborhood, data = housing)
+summary(model_interaction)
+
+```
+
+From this interaction model, the results indicated that only square feet was highly significant and none of the neighborhood or interaction terms were statistically significant.
+This suggests that the effect of house size on price is consistent across all neighborhoods and no substantial confounding effects were observed.
+
+
+Comprehensive model
+```{r}
+model_full <- lm(Price ~ SquareFeet + Bedrooms + Bathrooms + YearBuilt + Neighborhood, data = housing)
+summary(model_full)
+
+```
+
+The comprehensive multiple linear regression model included all predictors. The model explained approximately 57% of the variation in house prices. Among the predictors, sqft, bedrooms, and bathrooms had the largest and most statistically significant effects on price.
+
+Model Selection
+```{r}
+model_reduced <- lm(Price ~ SquareFeet + Bedrooms + Bathrooms + Neighborhood, data = housing)
+summary(model_reduced)
+AIC(model_full, model_reduced)
+
+```
+The reduced model produced an AIC of 1,222,995, slightly lower than the full model’s AIC of 1,222,996, indicating a marginally better and more efficient fit.
+This confirms that the simpler model achieves the same explanatory power with fewer predictors.
+Therefore, the reduced model was selected as the preferred model for further diagnostics and final evaluation.
+
+```{r}
+# Diagnostic Plots for the reduced model
+par(mfrow = c(2, 2))
+plot(model_reduced)
+
+```
+
+The residuals vs fitted plot showed a random scatter around 0, which suggests that linearity and equal variance assumptions were met
+The Q-Q plot indicated that residuals were approximately normally distributed, with only minor deviations at the ends.
+The scale-location plot confirmed that the variance of residuals remained roughly constant across fitted values, indicating homoscedasticity.
+No highly influential data points were detected, suggesting that no single observation disproportionately affected the model’s estimates.
+Overall, the model satisfies the key assumptions of linear regression.
+
+```{r}
+set.seed(123)   # for reproducibility
+
+train_index <- sample(1:nrow(housing), size = 0.7 * nrow(housing))
+
+train_data <- housing[train_index, ]
+test_data  <- housing[-train_index, ]
+
+model_final <- lm(Price ~ SquareFeet + Bedrooms + Bathrooms + Neighborhood,
+                  data = train_data)
+summary(model_final)
+
+predictions <- predict(model_final, newdata = test_data)
+# calculate errors
+errors <- test_data$Price - predictions
+
+# RMSE
+RMSE <- sqrt(mean(errors^2))
+
+# MAE
+MAE <- mean(abs(errors))
+
+# Test R-squared
+SSE <- sum(errors^2)
+SST <- sum((test_data$Price - mean(test_data$Price))^2)
+R2_test <- 1 - SSE/SST
+
+RMSE
+MAE
+R2_test
+
+```
+
+
+The final regression model was the reduced model which included, SquareFeet, Bedrooms, Bathrooms, and Neighborhood. This model provides a strong and interpretable fit for predicting housing prices. It captures the structural and locational factors influencing home values while maintaining model simplicity and validity.
+
+The final model indicates that house prices are primarily drien by structural features of the home with square footage having the strongest effect, with each additional square foot increasing price by $99. Bedrooms and bathrooms also contribute positively to price, and homes located in urban neighborhoods tend to be priced higher than similar homes in rural areas. Overall, the model shows that larger homes with more rooms and located in urban areas tend to cost more.
+
+Model Performance
+I split the dataset into 70% training and 30% testing sets and the final model achieved a R-squared of 0.568, which is nearly identical to the training R-squared of 0.571, indicating strong generalization and no overfitting.
+The prediction errors showed a RMSE of approximately $49,629 and a MAE of $39,656 on the test set. This means that on average, the mode;'s predictions are within $40,000-$50,000 of the actual selling price.
+
+
+
+
+
+
+
+
+
+
+
